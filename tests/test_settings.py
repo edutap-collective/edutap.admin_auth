@@ -5,6 +5,7 @@ import base64
 import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from edutap.admin_auth.permissions import MalformedPermission
 from edutap.admin_auth.requires import AdminAuth
@@ -32,7 +33,7 @@ def test_the_backend_choice_has_no_default(monkeypatch):
     # Which sign-in guards the admin API is a deployment decision; a default
     # would make it an accident.
     monkeypatch.delenv("EDUTAP_ADMIN_AUTH_BACKEND", raising=False)
-    with pytest.raises(Exception, match="backend"):
+    with pytest.raises(ValidationError, match="backend"):
         AdminAuthSettings()
 
 

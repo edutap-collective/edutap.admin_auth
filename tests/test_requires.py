@@ -120,3 +120,10 @@ def test_without_a_backend_current_identity_answers_401():
         return {}
 
     assert TestClient(app).get("/tenants/lmu-ub/templates").status_code == 401
+
+
+def test_a_tenant_segment_the_permission_form_cannot_carry_is_a_400():
+    # ':' and '@' cannot appear in the tenant half of a permission; a path
+    # like /tenants/a:b/... is a caller's malformed input, not a server error.
+    response = app_with(UB_ADMIN).get("/tenants/a:b/templates")
+    assert response.status_code == 400

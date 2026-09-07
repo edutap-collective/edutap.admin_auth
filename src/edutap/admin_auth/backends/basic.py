@@ -45,10 +45,12 @@ def basic_backend(users: dict[str, BasicUser]) -> SignInBackend:
 
 def _credentials_from(request: Request) -> tuple[str, str]:
     header = request.headers.get("authorization", "")
-    if not header.startswith("Basic "):
+    # RFC 7235: the auth-scheme comparison is case-insensitive.
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "basic" or not token:
         raise HTTPException(401, "Sign in", headers=_CHALLENGE)
     try:
-        decoded = base64.b64decode(header.removeprefix("Basic "), validate=True).decode()
+        decoded = base64.b64decode(token.strip(), validate=True).decode()
         username, _, password = decoded.partition(":")
     except (binascii.Error, UnicodeDecodeError) as error:
         raise HTTPException(401, "Sign in", headers=_CHALLENGE) from error
