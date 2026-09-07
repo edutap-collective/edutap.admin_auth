@@ -21,7 +21,24 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# The federated sign-ins this library's `federated_backend` wraps. Direct git
+# references pinned to commits: both packages are public on GitHub but not on
+# PyPI, and they carry no tags yet -- move the pin when they do. The SAML SP
+# additionally shells out to the `xmlsec1` system tool at runtime.
+saml = [
+    "fastapi-auth-saml-federated @ git+https://github.com/edutap-collective/fastapi-auth-saml-federated@22f5ff915daf993fce7871d81c608758270cb942",
+]
+oidc = [
+    "fastapi-auth-openid-federated @ git+https://github.com/edutap-collective/fastapi-auth-openid-federated@a363b3edfb4d251f1956bb92ec3f318bcc468067",
+]
 dev = [
+    # The suite exercises `federated_backend` against the real federated
+    # identity models, not just fakes. Only the OIDC package though: the two
+    # extras cannot share a venv today -- joserfc>=1.7 (OIDC) needs
+    # cryptography>=45 while pysaml2 (SAML) caps pyopenssl below 24.3, which
+    # caps cryptography below 44. The SAML model test skips where its import
+    # is absent; run it in a venv installed with `.[saml]` alone.
+    "edutap.admin_auth[oidc]",
     # Never imported by this package. `fastapi.testclient` needs an HTTP client, and
     # starlette 1.3 takes `httpx2` in preference to `httpx`, warning whenever it has
     # to fall back to the latter. Listing it here keeps that fallback -- and its
@@ -37,6 +54,13 @@ docs = ["myst-parser", "sphinx>=8"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/edutap"]
+
+[tool.hatch.metadata]
+# Required by hatchling for the two direct references (git URLs, not PyPI names)
+# in the optional dependencies above. This package is not published to PyPI
+# itself, so the restriction direct references normally exist to enforce there
+# does not apply.
+allow-direct-references = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
