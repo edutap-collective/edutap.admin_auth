@@ -19,7 +19,23 @@ class FakeFederatedIdentity(BaseModel):
 
 
 def request() -> Request:
-    return Request({"type": "http", "method": "GET", "url": "http://t/", "headers": []})
+    # A complete minimal HTTP scope: the backend under test only reads
+    # headers today, but an incomplete scope would turn any future access to
+    # request.url or request.path into a KeyError inside the test.
+    return Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/",
+            "raw_path": b"/",
+            "query_string": b"",
+            "headers": [],
+            "server": ("testserver", 80),
+            "client": ("testclient", 50000),
+        }
+    )
 
 
 def backend_answering(identity, identifier=lambda i: i.eppn):

@@ -16,11 +16,28 @@ from edutap.admin_auth.backends.federated import federated_backend
 
 
 def request() -> Request:
-    return Request({"type": "http", "method": "GET", "url": "http://t/", "headers": []})
+    # A complete minimal HTTP scope: the backend under test only reads
+    # headers today, but an incomplete scope would turn any future access to
+    # request.url or request.path into a KeyError inside the test.
+    return Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/",
+            "raw_path": b"/",
+            "query_string": b"",
+            "headers": [],
+            "server": ("testserver", 80),
+            "client": ("testclient", 50000),
+        }
+    )
 
 
 async def test_wraps_the_saml_identity_model():
     saml_identity = pytest.importorskip("fastapi_auth.saml.identity.model")
+    saml_identifier = pytest.importorskip("fastapi_auth.saml.identity.identifier")
     identity = saml_identity.FederatedIdentity(
         eppn="jdoe@lmu.de",
         display_name="J. Doe",
@@ -31,7 +48,10 @@ async def test_wraps_the_saml_identity_model():
     async def current_user(request: Request):
         return identity
 
-    admin = await federated_backend(current_user, lambda i: i.eppn)(request())
+    def identifier(identity):
+        return saml_identifier.select_identifier(identity, "subject_id", ["eppn"])
+
+    admin = await federated_backend(current_user, identifier)(request())
     assert admin.subject == "jdoe@lmu.de"
     assert admin.groups == ["urn:mace:example:admin"]
     assert admin.claims["attributes"] == {"memberOf": ["cn=ub-admins"]}
@@ -39,6 +59,7 @@ async def test_wraps_the_saml_identity_model():
 
 async def test_wraps_the_oidc_identity_model_with_groups_from_a_claim():
     oidc_identity = pytest.importorskip("fastapi_auth.openid.identity.model")
+    oidc_identifier = pytest.importorskip("fastapi_auth.openid.identity.identifier")
     identity = oidc_identity.FederatedIdentity(
         sub="abc123",
         display_name="J. Doe",
@@ -48,6 +69,9 @@ async def test_wraps_the_oidc_identity_model_with_groups_from_a_claim():
     async def current_user(request: Request):
         return identity
 
-    admin = await federated_backend(current_user, lambda i: i.sub, groups_from="groups")(request())
+    def identifier(identity):
+        return oidc_identifier.select_identifier(identity, "sub", ["eppn"])
+
+    admin = await federated_backend(current_user, identifier, groups_from="groups")(request())
     assert admin.subject == "abc123"
     assert admin.groups == ["ub-admins"]
