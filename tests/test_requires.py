@@ -91,7 +91,8 @@ def test_the_identity_reaches_the_route_when_asked_for():
 def test_a_configured_tenant_resolver_maps_the_path_value_to_the_permission_tenant():
     # The pass builder's admin routes carry a tenant UUID in the path while
     # permissions carry the tenant key; the resolver is that translation.
-    async def resolver(path_value: str) -> str:
+    async def resolver(request, path_value: str) -> str:
+        assert request.url.path.startswith("/tenants/")
         return {"3f9a": "lmu-ub"}[path_value]
 
     auth = AdminAuth(permission_map=MAP, tenant_resolver=resolver)
