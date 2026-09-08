@@ -1,5 +1,12 @@
 # Changes
 
+## 0.2.0 (unreleased)
+
+- `AdminAuth.check(request, permission)`: the imperative twin of `requires()`,
+  for host-side seams that declare permissions on routes mounted in several
+  applications. Same semantics; a malformed permission literal raises at the
+  host instead of masquerading as a caller's 400.
+
 ## 0.1.0 (unreleased)
 
 - Initial release: `AdminIdentity`, the `object:verb@tenant` permission

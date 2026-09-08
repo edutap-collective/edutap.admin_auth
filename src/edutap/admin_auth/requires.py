@@ -113,31 +113,60 @@ class AdminAuth:
             request: Request,
             identity: AdminIdentity = Depends(self.current_identity),  # noqa: B008
         ) -> AdminIdentity:
-            path_value = request.path_params.get(self._tenant_parameter)
-            if path_value is None:
-                # The route was mounted outside a tenant path. A mistake in
-                # the service, not a caller to be refused with 403 -- fail
-                # loudly instead of quietly denying everybody.
-                raise RuntimeError(
-                    f"requires({permission!r}) needs a "
-                    f"{{{self._tenant_parameter}}} path parameter on its route"
-                )
-            tenant = str(path_value)
-            try:
-                Permission.parse(f"{permission}@{tenant}")
-            except MalformedPermission as error:
-                # The segment cannot appear in a permission's tenant half
-                # (':' or '@'). A caller's malformed input, checked BEFORE the
-                # resolver runs: a resolver that answers a key the form cannot
-                # carry stays a server error below, because that key came from
-                # our own configuration, not from the caller.
-                raise HTTPException(400, "Invalid tenant path segment") from error
-            if self._tenant_resolver is not None:
-                resolved = self._tenant_resolver(tenant)
-                tenant = await resolved if inspect.isawaitable(resolved) else resolved
-            needed = Permission.parse(f"{permission}@{tenant}")
-            if needed not in self._map.resolve(identity.groups):
-                raise HTTPException(403, f"Missing permission {needed}")
-            return identity
+            return await self._check_identity(request, permission, identity)
 
         return dependency
+
+    async def check(self, request: Request, permission: str) -> AdminIdentity:
+        """Establish the caller and enforce ``<object>:<verb>``, imperatively.
+
+        The twin of `requires()` for host-side seams: a service that declares
+        permissions on routes mounted in several applications (consumer,
+        in-process UI, admin) cannot hang a dependency needing an identity
+        there -- outside the admin mount there is none to resolve. Its seam
+        calls this instead, with the same semantics: 401 from the backend,
+        400 for a tenant segment the permission form cannot carry, 403 naming
+        the missing permission, RuntimeError for a route without a tenant
+        segment.
+        """
+        identity = await self.current_identity(request)
+        return await self._check_identity(request, permission, identity)
+
+    async def _check_identity(
+        self, request: Request, permission: str, identity: AdminIdentity
+    ) -> AdminIdentity:
+        # The host's literal is validated on its own first, so a typo raises
+        # MalformedPermission at the host instead of masquerading as the 400
+        # meant for a caller's bad tenant segment.
+        try:
+            Permission.parse(f"{permission}@-")
+        except MalformedPermission as error:
+            raise MalformedPermission(
+                f"check() takes <object>:<verb> without a tenant; got {permission!r}"
+            ) from error
+        path_value = request.path_params.get(self._tenant_parameter)
+        if path_value is None:
+            # The route was mounted outside a tenant path. A mistake in
+            # the service, not a caller to be refused with 403 -- fail
+            # loudly instead of quietly denying everybody.
+            raise RuntimeError(
+                f"checking {permission!r} needs a "
+                f"{{{self._tenant_parameter}}} path parameter on its route"
+            )
+        tenant = str(path_value)
+        try:
+            Permission.parse(f"{permission}@{tenant}")
+        except MalformedPermission as error:
+            # The segment cannot appear in a permission's tenant half
+            # (':' or '@'). A caller's malformed input, checked BEFORE the
+            # resolver runs: a resolver that answers a key the form cannot
+            # carry stays a server error below, because that key came from
+            # our own configuration, not from the caller.
+            raise HTTPException(400, "Invalid tenant path segment") from error
+        if self._tenant_resolver is not None:
+            resolved = self._tenant_resolver(tenant)
+            tenant = await resolved if inspect.isawaitable(resolved) else resolved
+        needed = Permission.parse(f"{permission}@{tenant}")
+        if needed not in self._map.resolve(identity.groups):
+            raise HTTPException(403, f"Missing permission {needed}")
+        return identity
