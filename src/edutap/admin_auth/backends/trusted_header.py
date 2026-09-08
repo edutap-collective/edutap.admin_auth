@@ -31,7 +31,21 @@ def trusted_header_backend(
     display_name_header: str | None = None,
     group_separator: str = GROUP_SEPARATOR,
 ) -> SignInBackend:
-    """Return a sign-in backend reading the frontend's asserted headers."""
+    """Return a sign-in backend reading the frontend's asserted headers.
+
+    Blank configuration is refused here, at wiring time: an empty separator
+    would crash on the first request (`split("")` raises), and a blank header
+    name would answer a silent 401 to everybody -- exactly the shape an empty
+    environment variable takes.
+    """
+    if not user_header.strip():
+        raise ValueError("user_header must not be blank")
+    if not groups_header.strip():
+        raise ValueError("groups_header must not be blank")
+    if not group_separator:
+        raise ValueError("group_separator must not be empty")
+    if display_name_header is not None and not display_name_header.strip():
+        raise ValueError("display_name_header must not be blank; omit it instead")
 
     async def identify(request: Request) -> AdminIdentity:
         subject = request.headers.get(user_header, "").strip()

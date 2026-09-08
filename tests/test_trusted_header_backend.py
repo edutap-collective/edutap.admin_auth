@@ -76,3 +76,21 @@ async def test_the_raw_header_values_reach_the_claims():
         request({"x-remote-user": "jdoe", "x-remote-groups": "a;b"})
     )
     assert admin.claims == {"x-remote-user": "jdoe", "x-remote-groups": "a;b"}
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"user_header": ""},
+        {"user_header": "   "},
+        {"groups_header": ""},
+        {"group_separator": ""},
+        {"display_name_header": ""},
+    ],
+)
+async def test_blank_configuration_fails_at_wiring_time_not_at_request_time(kwargs):
+    # An empty env value would otherwise surface as a crash on the first
+    # request (split("") raises) or as a silent 401 for everybody (a header
+    # name nothing ever carries).
+    with pytest.raises(ValueError, match=next(iter(kwargs))):
+        trusted_header_backend(**kwargs)
