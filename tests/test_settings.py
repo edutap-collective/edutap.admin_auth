@@ -67,3 +67,29 @@ def test_a_malformed_permission_in_settings_fails_at_wiring_time(monkeypatch):
     monkeypatch.setenv("EDUTAP_ADMIN_AUTH_PERMISSIONS", '{"g": ["templates:write"]}')
     with pytest.raises(MalformedPermission, match="'g'"):
         AdminAuth.from_settings(AdminAuthSettings())
+
+
+def test_from_settings_wires_the_trusted_header_backend(monkeypatch):
+    monkeypatch.setenv("EDUTAP_ADMIN_AUTH_BACKEND", "trusted_header")
+    monkeypatch.setenv("EDUTAP_ADMIN_AUTH_PERMISSIONS", '{"ub-admins": ["templates:read@lmu-ub"]}')
+    monkeypatch.setenv("EDUTAP_ADMIN_AUTH_TRUSTED_USER_HEADER", "x-shib-eppn")
+    monkeypatch.setenv("EDUTAP_ADMIN_AUTH_TRUSTED_GROUPS_HEADER", "x-shib-groups")
+    auth = AdminAuth.from_settings(AdminAuthSettings())
+    app = FastAPI()
+
+    @app.get(
+        "/tenants/{tenant_id}/templates",
+        dependencies=[Depends(auth.requires("templates:read"))],
+    )
+    async def list_templates(tenant_id: str) -> dict:
+        return {}
+
+    client = TestClient(app)
+    assert client.get("/tenants/lmu-ub/templates").status_code == 401
+    assert (
+        client.get(
+            "/tenants/lmu-ub/templates",
+            headers={"x-shib-eppn": "jdoe", "x-shib-groups": "ub-admins"},
+        ).status_code
+        == 200
+    )

@@ -10,7 +10,10 @@ Part of the eduTAP estate; the design lives in
 - **`AdminIdentity`** — who is calling: a subject, a display name, and the raw
   claims or attributes the deployment's sign-in produced.
 - **A sign-in backend, chosen by configuration.** HTTP Basic for local work and
-  tests; `federated_backend` wraps the estate's SAML SP and OIDC RP
+  tests; `trusted_header` for the estate's back-office zone, where the web
+  frontend (Shibboleth at the Apache) authenticates the person and asserts
+  the result as headers -- only ever behind a frontend that also strips those
+  headers from incoming client requests; `federated_backend` wraps the estate's SAML SP and OIDC RP
   (`fastapi-auth-saml-federated`, `fastapi-auth-openid-federated` -- the
   `[saml]` / `[oidc]` extras):
 

@@ -72,10 +72,21 @@ class AdminAuth:
         a startup failure rather than a person quietly lacking a right.
         """
         from .backends.basic import basic_backend
+        from .backends.trusted_header import trusted_header_backend
 
+        backend: SignInBackend
+        if settings.backend == "trusted_header":
+            backend = trusted_header_backend(
+                user_header=settings.trusted_user_header,
+                groups_header=settings.trusted_groups_header,
+                display_name_header=settings.trusted_display_name_header,
+                group_separator=settings.trusted_group_separator,
+            )
+        else:
+            backend = basic_backend(settings.basic_users)
         return cls(
             permission_map=PermissionMap.parse(settings.permissions),
-            backend=basic_backend(settings.basic_users),
+            backend=backend,
             tenant_parameter=tenant_parameter,
             tenant_resolver=tenant_resolver,
         )
