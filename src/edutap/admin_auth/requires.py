@@ -101,13 +101,7 @@ class AdminAuth:
         """
         # Validated here, at import time of the service module, so a typo is a
         # startup failure rather than a route that refuses everybody.
-        probe = f"{permission}@-"
-        try:
-            Permission.parse(probe)
-        except MalformedPermission as error:
-            raise MalformedPermission(
-                f"requires() takes <object>:<verb> without a tenant; got {permission!r}"
-            ) from error
+        _validate_literal(permission, "requires()")
 
         async def dependency(
             request: Request,
@@ -129,33 +123,27 @@ class AdminAuth:
         the missing permission, RuntimeError for a route without a tenant
         segment.
         """
+        _validate_literal(permission, "check()")
         identity = await self.current_identity(request)
         return await self._check_identity(request, permission, identity)
 
     async def _check_identity(
         self, request: Request, permission: str, identity: AdminIdentity
     ) -> AdminIdentity:
-        # The host's literal is validated on its own first, so a typo raises
-        # MalformedPermission at the host instead of masquerading as the 400
-        # meant for a caller's bad tenant segment.
-        try:
-            Permission.parse(f"{permission}@-")
-        except MalformedPermission as error:
-            raise MalformedPermission(
-                f"check() takes <object>:<verb> without a tenant; got {permission!r}"
-            ) from error
+        # The permission literal was validated by the entry point (requires()
+        # at wiring time, check() before the backend), so this core is about
+        # the tenant and the map alone.
         path_value = request.path_params.get(self._tenant_parameter)
         if path_value is None:
             # The route was mounted outside a tenant path. A mistake in
             # the service, not a caller to be refused with 403 -- fail
             # loudly instead of quietly denying everybody.
             raise RuntimeError(
-                f"checking {permission!r} needs a "
+                f"the permission {permission!r} needs a "
                 f"{{{self._tenant_parameter}}} path parameter on its route"
             )
-        tenant = str(path_value)
         try:
-            Permission.parse(f"{permission}@{tenant}")
+            needed = Permission.parse(f"{permission}@{path_value}")
         except MalformedPermission as error:
             # The segment cannot appear in a permission's tenant half
             # (':' or '@'). A caller's malformed input, checked BEFORE the
@@ -164,9 +152,19 @@ class AdminAuth:
             # our own configuration, not from the caller.
             raise HTTPException(400, "Invalid tenant path segment") from error
         if self._tenant_resolver is not None:
-            resolved = self._tenant_resolver(tenant)
+            resolved = self._tenant_resolver(str(path_value))
             tenant = await resolved if inspect.isawaitable(resolved) else resolved
-        needed = Permission.parse(f"{permission}@{tenant}")
+            needed = Permission.parse(f"{permission}@{tenant}")
         if needed not in self._map.resolve(identity.groups):
             raise HTTPException(403, f"Missing permission {needed}")
         return identity
+
+
+def _validate_literal(permission: str, entry_point: str) -> None:
+    """Refuse a permission literal that is not bare ``<object>:<verb>``."""
+    try:
+        Permission.parse(f"{permission}@-")
+    except MalformedPermission as error:
+        raise MalformedPermission(
+            f"{entry_point} takes <object>:<verb> without a tenant; got {permission!r}"
+        ) from error
