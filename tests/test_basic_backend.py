@@ -68,3 +68,12 @@ def test_the_identity_carries_the_users_groups_and_display_name():
 
     body = TestClient(app).get("/tenants/lmu-ub/whoami", headers=basic("jdoe", "s3cret")).json()
     assert body == {"subject": "jdoe", "display_name": "J. Doe"}
+
+
+def test_the_scheme_is_case_insensitive():
+    # RFC 7235: auth-scheme comparison is case-insensitive.
+    token = base64.b64encode(b"jdoe:s3cret").decode()
+    response = client().get(
+        "/tenants/lmu-ub/templates", headers={"Authorization": f"bAsIc {token}"}
+    )
+    assert response.status_code == 200

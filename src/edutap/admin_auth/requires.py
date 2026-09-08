@@ -112,6 +112,15 @@ class AdminAuth:
                     f"{{{self._tenant_parameter}}} path parameter on its route"
                 )
             tenant = str(path_value)
+            try:
+                Permission.parse(f"{permission}@{tenant}")
+            except MalformedPermission as error:
+                # The segment cannot appear in a permission's tenant half
+                # (':' or '@'). A caller's malformed input, checked BEFORE the
+                # resolver runs: a resolver that answers a key the form cannot
+                # carry stays a server error below, because that key came from
+                # our own configuration, not from the caller.
+                raise HTTPException(400, "Invalid tenant path segment") from error
             if self._tenant_resolver is not None:
                 resolved = self._tenant_resolver(tenant)
                 tenant = await resolved if inspect.isawaitable(resolved) else resolved
