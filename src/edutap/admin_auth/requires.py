@@ -12,7 +12,14 @@ from .permissions import MalformedPermission, Permission, PermissionMap
 if TYPE_CHECKING:
     from .settings import AdminAuthSettings
 
-TenantResolver = Callable[[str], str | Awaitable[str]]
+TenantResolver = Callable[[Request, str], str | Awaitable[str]]
+"""Translates the raw tenant path segment into the key permissions carry.
+
+Receives the request as well: a host's translation usually needs request
+context -- the database session bound to this request, the application
+state -- and a resolver that cannot reach it ends up opening a second
+session per request.
+"""
 
 SignInBackend = Callable[[Request], Awaitable[AdminIdentity]]
 """A configured sign-in: reads the request, answers who is calling.
@@ -44,8 +51,10 @@ class AdminAuth:
 
         `tenant_resolver` translates the raw path segment into the tenant key
         permissions carry -- the pass builder's admin routes hold a tenant
-        UUID in the path while its permissions name `lmu-ub`. Without one,
-        the path value is taken as the key.
+        UUID in the path while its permissions name `lmu-ub` -- and receives
+        the request for the context that translation needs (the request's
+        database session, the application state). Without one, the path value
+        is taken as the key.
         """
         self._map = permission_map
         self._backend = backend
@@ -152,7 +161,7 @@ class AdminAuth:
             # our own configuration, not from the caller.
             raise HTTPException(400, "Invalid tenant path segment") from error
         if self._tenant_resolver is not None:
-            resolved = self._tenant_resolver(str(path_value))
+            resolved = self._tenant_resolver(request, str(path_value))
             tenant = await resolved if inspect.isawaitable(resolved) else resolved
             needed = Permission.parse(f"{permission}@{tenant}")
         if needed not in self._map.resolve(identity.groups):
