@@ -1,6 +1,6 @@
 # Changes
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-09-08)
 
 - Initial release: `AdminIdentity`, the `object:verb@tenant` permission
   vocabulary, the settings-driven permission map, `requires()`, and the HTTP
